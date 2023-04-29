@@ -28,10 +28,10 @@ class Preset(models.Model):
             if not isinstance(block, TimeBlock):
                 raise Exception(f"Expected TimeBlocks not {type(block)}s")
             start_date, end_date = block.get_datetimes(set_date)
-            task, created = Task.objects.get_or_create(defaults=dict(intensity=self.intensity, context=self.context),preset=self,timeblock=block,owner=self.owner,start_date=start_date,end_date=end_date)
+            task, created = Task.objects.get_or_create(preset=self,timeblock=block,owner=self.owner,start_date=start_date,end_date=end_date)
             print(f"{task}, {not created}")
         if self.linked and self.linked != self:
-            self.linked.create_tasks(end_date.date)
+            self.linked.create_tasks(end_date.date())
     
     def validate_linked(self):
         """linked cannot be self"""
