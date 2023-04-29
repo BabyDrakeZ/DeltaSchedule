@@ -10,16 +10,40 @@ import plotly.express as px
 
 class Preset(models.Model):
     """Preset of TimeBlocks, takes a start_date and fills in the times from it (creating scheudleblocks)"""
-    slug = models.SlugField("Identify Number", max_length=7, unique=True, primary_key=True)
+    slug = models.SlugField("Call String", max_length=7, unique=True, primary_key=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
-    context = models.CharField(max_length=255)
-    intensity = models.PositiveIntegerField(default=0)
+    context = models.CharField(max_length=255, default="", blank=True)
 
-    def create_tasks(self):
+    
+
+    INTENSITY_DEF = ((0, "OFF"),(1, "SLEEP"),(2, "WORK"),(3, "WORK+"),(4, "up-OVERNIGHT"),(5, "OVERNIGHT"))
+
+    intensity = models.PositiveIntegerField(default=0, choices=INTENSITY_DEF)
+
+    linked = models.OneToOneField("preset", null=True, blank=True, unique=False, related_name="+", on_delete=models.SET_NULL)
+    
+   
+    def create_tasks(self, set_date:date):
         for block in self.blocks.all():
-            start_date, end_date = block.get_datetimes()
+            if not isinstance(block, TimeBlock):
+                raise Exception(f"Expected TimeBlocks not {type(block)}s")
+            start_date, end_date = block.get_datetimes(set_date)
             task, created = Task.objects.get_or_create(defaults=dict(intensity=self.intensity, context=self.context),preset=self,timeblock=block,owner=self.owner,start_date=start_date,end_date=end_date)
             print(f"{task}, {not created}")
+        if self.linked and self.linked != self:
+            self.linked.create_tasks(end_date.date)
+    
+    def validate_linked(self):
+        """linked cannot be self"""
+        if self.linked and self.linked.pk == self.pk:
+            raise Exception(f"linked cannot be self")
+
+    def clean(self) -> None:
+        self.validate_linked()
+        return super().clean()
+
+    def __str__(self) -> str:
+        return f"{self.slug} - {self.owner.username} ({self.get_intensity_display()})"
 class TimeBlock(models.Model):
     """Allows for naive time objects stetching across days"""
     preset = models.ForeignKey(Preset, related_name='blocks', on_delete=models.CASCADE)
@@ -28,7 +52,7 @@ class TimeBlock(models.Model):
     end_time = models.TimeField(auto_now=False, auto_now_add=False)
 
     def validate_start_end(self):
-        if (self.days == 0 and self.end_time > self.start_time):
+        if (self.days == 0 and not self.end_time > self.start_time):
             raise ValueError("Timeblock end must be later than start. (or days > 0)")
 
     def clean(self) -> None:
