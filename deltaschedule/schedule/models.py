@@ -24,9 +24,8 @@ class Preset(models.Model):
     
    
     def create_tasks(self, set_date:date):
+        block:TimeBlock
         for block in self.blocks.all():
-            if not isinstance(block, TimeBlock):
-                raise Exception(f"Expected TimeBlocks not {type(block)}s")
             start_date, end_date = block.get_datetimes(set_date)
             task, created = Task.objects.get_or_create(preset=self,timeblock=block,owner=self.owner,start_date=start_date,end_date=end_date)
         if self.linked and self.linked != self:
