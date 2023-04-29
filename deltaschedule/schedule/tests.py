@@ -31,4 +31,5 @@ class PresetModelTests(TestCase):
         print(_date)
         self.preset.create_tasks(_date)
         assert Task.objects.count() == 3
+        assert Task.objects.filter(end_date__day__gt=_date.day).count() == 2
         #teardown
