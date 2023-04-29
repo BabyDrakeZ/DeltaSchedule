@@ -1,0 +1,21 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>DeltaSchedule</title>
+    <style href="{% static 'style.css' %}"></style>
+    <script src="{% static 'gantt.js' %}"></script>
+    {% block styles %}
+    
+    {% endblock styles %}
+  </head>
+  <body>
+    <h1>{% block header %}{% endblock header %}</h1>
+    {% block content %}
+    
+    {% endblock content %}
+  </body>
+</html>
