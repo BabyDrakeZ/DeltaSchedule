@@ -2,6 +2,7 @@ from django.db import models
 from typing import Tuple
 from datetime import datetime, timedelta, date
 from django.contrib.auth.models import User
+from copy import deepcopy
 # Create your models here.
 import pandas as pd
 from plotly.offline import plot
@@ -14,13 +15,11 @@ class Preset(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     context = models.CharField(max_length=255, default="", blank=True)
 
-    
+    INTENSITY_DEF = ((0, "OFF"),(1, "SLEEP"),(2, "WORK"),(3, "WORK+"),(4, "OVERNIGHT-bk"),(5, "OVERNIGHT"), (6, "OVERNIGHT-24"))
 
-    INTENSITY_DEF = ((0, "OFF"),(1, "SLEEP"),(2, "WORK"),(3, "WORK+"),(4, "up-OVERNIGHT"),(5, "OVERNIGHT"))
+    intensity = models.PositiveIntegerField(default=2, choices=INTENSITY_DEF)
 
-    intensity = models.PositiveIntegerField(default=0, choices=INTENSITY_DEF)
-
-    linked = models.OneToOneField("preset", null=True, blank=True, unique=False, related_name="+", on_delete=models.SET_NULL)
+    linked = models.ForeignKey("preset", null=True, blank=True, unique=False, related_name="+", on_delete=models.SET_NULL)
     
    
     def create_tasks(self, set_date:date):
@@ -40,11 +39,25 @@ class Preset(models.Model):
         self.validate_linked()
         return super().clean()
 
+    def save(self, *args, **kwargs):
+        slug = self.slug
+        try:
+            self.refresh_from_db(fields=['slug'])
+        except: pass
+        slug_old = self.slug
+        if slug != slug_old:
+            copy = deepcopy(self)
+            copy.slug = slug
+            copy.pk = slug
+            super(Preset, copy).save(*args, **kwargs)
+            self.blocks.update(preset=copy)
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"{self.slug} - {self.owner.username} ({self.get_intensity_display()})"
 class TimeBlock(models.Model):
     """Allows for naive time objects stetching across days"""
-    preset = models.ForeignKey(Preset, related_name='blocks', on_delete=models.CASCADE)
+    preset = models.ForeignKey(Preset, related_name='blocks', unique=False, on_delete=models.CASCADE)
     days = models.SmallIntegerField("Stetched Days", default=0, help_text="Does this timeblock cross days")
     start_time = models.TimeField(auto_now=False, auto_now_add=False)
     end_time = models.TimeField(auto_now=False, auto_now_add=False)
@@ -71,8 +84,8 @@ class TimeBlock(models.Model):
         return (start_date, end_date)
 
 class Task(models.Model):
-    preset = models.ForeignKey(Preset, null=True, related_name='tasks', on_delete=models.CASCADE)
-    timeblock = models.ForeignKey(TimeBlock, null=True, on_delete=models.SET_NULL)
+    preset = models.ForeignKey(Preset, null=True, related_name='tasks', blank=True, on_delete=models.CASCADE)
+    timeblock = models.ForeignKey(TimeBlock, null=True, blank=True, on_delete=models.SET_NULL)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     week_number = models.CharField(max_length=2, blank=True) #defines whether mon, tues, weds, thurs, fri, sat, sun
     start_date = models.DateTimeField(auto_now=False, auto_now_add=False)

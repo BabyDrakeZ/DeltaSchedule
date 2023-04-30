@@ -19,9 +19,10 @@ from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
 
-from schedule.views import CalandarView
+from schedule.views import CalandarView, calendar_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('calandar/', CalandarView.as_view(),)
+    path('calandar/', CalandarView.as_view(),),
+    path('', calendar_view, name="calendardetail")
 ] + static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
