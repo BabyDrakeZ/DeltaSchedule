@@ -1,14 +1,14 @@
 from django.contrib import admin
-from .models import Task, TimeBlock, Preset
+from .models import Task, TimeBlock, Shift
 # Register your models here.
 
 class TimeBlockInline(admin.TabularInline):
     model = TimeBlock
     extra = 2
 
-@admin.register(Preset)
-class PresetAdmin(admin.ModelAdmin):
-    model = Preset
+@admin.register(Shift)
+class ShiftAdmin(admin.ModelAdmin):
+    model = Shift
     inlines = [TimeBlockInline]
 
 @admin.register(Task)

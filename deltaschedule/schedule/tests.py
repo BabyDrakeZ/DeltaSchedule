@@ -2,16 +2,16 @@ from django.test import TestCase
 from datetime import time, datetime, date
 # Create your tests here.
 from django.contrib.auth.models import User
-from .models import TimeBlock, Preset, Task
+from .models import TimeBlock, Shift, Task
 
 class PresetModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create(username="TestUser", password="pbkdf2_sha")
-        linked = Preset(slug="~PC", owner=cls.user, context="sleep recovery", intensity=1, linked=None)
+        linked = Shift(slug="~PC", owner=cls.user, context="sleep recovery", intensity=1, linked=None)
         linked.save()
         TimeBlock.objects.create(preset=linked, start_time=time(7, 2), end_time=time(14, 2))
-        preset = Preset(slug="~N1", owner=cls.user, context="overnight", intensity=5, linked=linked)
+        preset = Shift(slug="~N1", owner=cls.user, context="overnight", intensity=5, linked=linked)
         preset.save()
         cls.preset = preset
         cls.linked = linked
