@@ -1,18 +1,17 @@
 from typing import List
 from django.db.transaction import Atomic
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.views import generic
 from django.http import HttpRequest, Http404
 from django.db.models import QuerySet
 # Create your views here.
 from datetime import date, timedelta, datetime
-from .models import Task, Shift
+from .models import Task, Shift, TimeBlock, Schedule
 from .forms import ShiftForm
 
 from plotly.offline import plot
 import plotly.express as px
-import plotly.figure_factory as ff
 import pandas as pd
 
 class CalandarView(generic.ListView):
@@ -24,65 +23,39 @@ def refresh_tasks_view(request:HttpRequest, call):
         data = request.POST.copy()
         _date = data.get('date')
         print("_date")
-
-def generate_tasks_from_calls(call_list: List[str], start=None):
-    """If start_date is not given auto-fill the start of the month"""
-    shift_list: List[Shift] = []
-    if not start:
-        today = datetime.today()
-        start = datetime.combine(date(today.year, today.month, 1),today.time(),today.tzinfo)
-    day = 0
-    with Atomic():
-        for call in call_list:
-            shift_list.append(Shift.objects.get(call=call))
-    for shift in shift_list:
-        new_tasks, days = shift.create_tasks(start + timedelta(days))
-        day += days
-
-def availablility(task_list: List[Task]):
-    if len(task_list) == 0: #empty
-        raise Exception("No tasks to refrence")
-    last_task = task_list[0]
-    for task in task_list:
-        if not isinstance(task, Task):
-            raise Exception("Invalid Task type")
-        if task.intensity > 2:
-            #not available
-            pass
-        else:
-            #available
-            pass
         
-def calendar_view(request):
-    qs = Task.objects.all()
-    
-    template = "calendar.html"
+def bulk_schedule(request, pk):
     if request.method == "POST":
-        form = ShiftForm(request.POST)
-        if form.is_valid():
-            preset:Shift = form.cleaned_data.get('preset')
-            date = form.cleaned_data.get('date')
-            preset.create_tasks(date)
+        data = request.POST.copy()
+        call_strs: str = data.get("calls",None)
+        start_day = data.get("day", None)
+        calls = call_strs.split(",")
+        try:
+            schedule = Schedule.objects.get(owner=request.user)
+        except:
+            return render(request, "bulk_form.html", {"message":"You do not have a schedule associated with your account"})
+        schedule.generate_tasks_from_calls(calls, start=start_day)
+    return render(request,"bulk_form.html")
+
+def schedule_form(request):
+    """View for scheduling new tasks"""
+    shiftform = ShiftForm(request.POST)
+def index(request):
+    """View for displaying all schedules"""
+    context = {}
+    today = date.today()
+    if today.month == 2 and ((today.year % 400 == 0) and (today.year % 100 == 0)) or ((today.year % 4 == 0) and (today.year % 100 != 0)):
+        num_days = 29
     else:
-        form = ShiftForm()
-
-    tasks_data = [
-        dict(Task=str(task), Person=str(task.owner.username), Start=task.start_date, Finish=task.end_date, Call=task.preset.call, Intensity=task.intensity, Delete=f"<a href='{task.pk}/delete'>x</a>") for task in qs
-    ]
-    # month_of_dates = []
-    # d = date.today()
-    # focus_month = d.month
-    # while (d.month == focus_month):
-    #     month_of_dates.append(d)
-    #     d = (d + timedelta(1))
-    if len(tasks_data) == 0:
-        context = {'plot_div': "No Data Provided", 'form':form}
-        return render(request,template, context)
-
-    _dataframe = pd.DataFrame(tasks_data)
-    fig = px.timeline(_dataframe, x_start="Start", x_end="Finish", y="Person", color="Call",hover_data=["Intensity", "Delete"])
-    fig.update_traces(width=0.2,)
-    gantt = fig.to_html()
-    
-    context = {'plot_div': gantt, 'form':form}
-    return render(request,template, context)
+        month_days = {1:31,2:28,3:31,4:30,5:31,6:30,7:31,8:31,9:30,10:31,11:30,12:31}
+        num_days = month_days[today.month]
+    context["today"] = today
+    context["days"] = range(1, num_days+1)
+    schedule_dict = {}
+    for schedule in Schedule.objects.all():
+        task_list = []
+        for task in schedule.tasks.filter(start_date__month=today.month):
+            task_list.append(task)
+        schedule_dict.update({str(schedule):task_list})
+    context["schedule_dict"] = schedule_dict.items()
+    return render(request,"calendar.html", context)

@@ -1,12 +1,183 @@
 {% extends "base.html" %}
+{% block styles %}
+<style>
+    /* RESET RULES
+    –––––––––––––––––––––––––––––––––––––––––––––––––– */
+    :root {
+    --white: #fff;
+    --divider: lightgrey;
+    --body: #f5f7f8;
+    }
+
+    * {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+    }
+
+    ul {
+    list-style: none;
+    }
+
+    a {
+    text-decoration: none;
+    color: inherit;
+    }
+
+    body {
+    background: var(--body);
+    font-size: 16px;
+    font-family: sans-serif;
+    padding-top: 40px;
+    }
+
+    .chart-wrapper {
+    max-width: 1150px;
+    padding: 0 10px;
+    margin: 0 0;
+    }
+
+
+    /* CHART-VALUES
+    –––––––––––––––––––––––––––––––––––––––––––––––––– */
+    .chart-wrapper .chart-values {
+    position: relative;
+    display: flex;
+    margin-bottom: 20px;
+    font-weight: bold;
+    font-size: 1.2rem;
+    }
+
+    .chart-wrapper .chart-values li {
+    flex: 1;
+    min-width: 80px;
+    text-align: center;
+    }
+
+    .chart-wrapper .chart-values li:not(:last-child) {
+    position: relative;
+    }
+
+    .chart-wrapper .chart-values li:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    height: 510px;
+    border-right: 1px solid var(--divider);
+    }
+
+
+    /* CHART-BARS
+    –––––––––––––––––––––––––––––––––––––––––––––––––– */
+    .chart-wrapper .chart-bars li {
+    position: relative;
+    color: var(--white);
+    margin-bottom: 15px;
+    font-size: 16px;
+    border-radius: 20px;
+    padding: 10px 20px;
+    width: 0;
+    opacity: 0;
+    transition: all 0.65s linear 0.2s;
+    }
+    .chart-wrapper .chart-bars li:hover span{ 
+    display:block;
+    }
+
+    @media screen and (max-width: 600px) {
+    .chart-wrapper .chart-bars li {
+        padding: 10px;
+    }
+    }
+
+
+    /* FOOTER
+    –––––––––––––––––––––––––––––––––––––––––––––––––– */
+    .page-footer {
+    font-size: 0.85rem;
+    padding: 10px;
+    text-align: right;
+    color: var(--black);
+    }
+
+    .page-footer span {
+    color: #e31b23;
+    }
+
+
+    /*
+    Popup Details
+    */
+    span.pop {
+        background: #F8F8F8;
+        border: 5px solid #DFDFDF;
+        color: #717171;
+        font-size: 13px;
+        height: fit-content;
+        width: fit-content;
+        letter-spacing: 1px;
+        line-height: 30px;
+        text-align: center;
+        text-transform: uppercase;
+        display: none;
+        position: relative;
+        left: 50%;
+        padding: 0 20px;
+        transform: translate(-50%, -50%);
+    }
+</style>
+
+{% endblock styles %}
+
 {% block content %}
-    <form method="POST">
-        {% csrf_token %}
-        {{form.as_p}}
-        <button>Add Preset</button>
-    </form>
-    {% autoescape off %}
-        {{ plot_div }}
-    {% endautoescape %}
-    
+{% for name, tasks in schedule_dict %}
+<p>{{name}}</p>
+<div class="chart-wrapper">
+<ul class="chart-values">    
+{% for day in days %}<li>{{day}}</li>{% endfor %}
+</ul>
+<ul class="chart-bars">
+    {% for task in  tasks %}
+    <li data-duration="{{task.start_datetime|date:'j:G'}}-{{task.end_datetime|date:'j:G'}}" data-color="#b03532">Task: {{task.context}}<span class="pop">Starts 5:7, ends 7:36</span></li>
+    {% endfor %}
+</ul>
+{% endfor %}
+</div>
+    <script>
+        function createChart(e) {
+            const days = document.querySelectorAll(".chart-values li");
+            const tasks = document.querySelectorAll(".chart-bars li");
+            const daysArray = [...days];
+          
+            tasks.forEach(el => {
+              const duration = el.dataset.duration.split("-");
+              const start = duration[0].split(":");
+              const startDay = start[0];
+              const startHour = start[1];
+              const end = duration[1].split(":");
+              const endDay = end[0]; 
+              const endHour = end[1];
+              console.log(startHour);
+              let left = 0,
+                width = 0;
+              var filteredArray = daysArray.filter(day => day.textContent == startDay);
+              left = filteredArray[0].offsetLeft + filteredArray[0].offsetWidth * startHour / 24;
+              var filteredArray2 = daysArray.filter(day => day.textContent == endDay);
+              width = filteredArray2[0].offsetLeft - left + filteredArray[0].offsetWidth * endHour / 24;
+              console.log(left);
+              console.log(width);
+              
+              // apply css
+              el.style.left = `${left}px`;
+              el.style.width = `${width}px`;
+              if (e.type == "load") {
+                el.style.backgroundColor = el.dataset.color;
+                el.style.opacity = 1;
+              }
+            });
+          }
+          
+          window.addEventListener("load", createChart);
+          window.addEventListener("resize", createChart);
+    </script>
 {% endblock content %}

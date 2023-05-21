@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block content %}
+    <form method="POST">
+        {% csrf_token %}
+    <input name="calls"/>
+    Input in the form "N1,N4,N3,N4"
+    <input name=start_day type=date>
+    <button>Create Tasks</button>
+    </form>
+{% endblock content %}
