@@ -7,4 +7,7 @@
     <input name=start_day type=date>
     <button>Create Tasks</button>
     </form>
+    {% if message %}
+    Error: {{message}}
+    {% endif %}
 {% endblock content %}

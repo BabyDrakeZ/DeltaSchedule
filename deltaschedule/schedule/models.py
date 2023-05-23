@@ -1,6 +1,5 @@
 from typing import List, Union
 from django.db import models, transaction
-from colorfield.fields import ColorField
 from typing import Tuple
 from datetime import datetime, timedelta, date, time
 from django.contrib.auth.models import User
@@ -10,20 +9,35 @@ import pandas as pd
 from plotly.offline import plot
 import plotly.express as px
 
+class WorkKey(models.Model):
+    level = models.IntegerField()
+    name = models.CharField(max_length=63)
+    color = models.CharField(max_length=18, default="#FFFFFF", blank=True)
 
-WORK_KEYS = ((0, "OFF"),(1, "WORK"),(2, "SLEEP"),(3,"BACKUP"),(4, "OVERNIGHT"))
+    @classmethod
+    def choices(cls):
+        _o = []
+        for key in cls.objects.all():
+            _o.append((key.level, key.name))
+    
+    class Meta:
+        ordering = ['level']
+    
+    def __str__(self):
+        return self.name + f"  (^{self.level})"
 
 class Schedule(models.Model):
     """Schedule is free to work when dependent is avaiable"""
     name = models.CharField(max_length=30, null=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
-    dependent = models.ForeignKey("schedule", on_delete=models.SET_NULL, related_name="dependents", null=True, blank=True)
-    available_at = models.PositiveIntegerField(default=1, choices=WORK_KEYS, help_text="defines the maximum level of work that you are avaible at")
+    dependent_on = models.ForeignKey("schedule", on_delete=models.SET_NULL, related_name="dependents", null=True, blank=True)
+    work_key = models.ForeignKey(WorkKey, on_delete=models.CASCADE, related_name="+")
+    off_work_key = models.ForeignKey(WorkKey, on_delete=models.CASCADE, related_name="+")
     
     def to_html(self):
         qs: models.QuerySet[Task] = self.tasks.all()
         tasks_data = [
-            dict(Task=str(task), y=self.__str__(), Schedule=self.__str__(), Start=task.start_date, Finish=task.end_date, Call=task.preset.call, Intensity=task.intensity, Delete=f"<a href='{task.pk}/delete'>x</a>") for task in qs
+            dict(Task=str(task), y=self.__str__(), Schedule=self.__str__(), Start=task.start_date, Finish=task.end_date, Call=task.preset.call, Intensity=task.work_key.level, Delete=f"<a href='{task.pk}/delete'>x</a>") for task in qs
         ]
         
         _dataframe = pd.DataFrame(tasks_data)
@@ -41,20 +55,20 @@ class Schedule(models.Model):
     
     def dependent_availability(self):
         """When dependent is working overnight, you are not available, visa versa"""
-        dependent: Schedule = self.dependent
+        dependent: Schedule = self.dependent_on
         if dependent == None:
             raise Exception("dependent_availability() can only be run on schedules which are dependent")
         dependent_task_list: List[Task] = dependent.tasks.all().list()
         new_task_list: List[Task] = []
         for task in dependent_task_list:
-            if task.intensity > 1:
+            if task.work_key.level > self.work_key.level:
                 #not available to work (staying at home)
-                off_task = Task.objects.get_or_create(intensity=1, context="Off Work", timeblock=task.timeblock, start_date=task.start_date, schedule=self)
+                off_task = Task.objects.get_or_create(work_key=self.off_work_key, context="Off Work", timeblock=task.timeblock, start_date=task.start_date, schedule=self)
                 new_task_list.append(off_task)
             else:
                 #available to work
                 block = TimeBlock.objects.get_or_create(start_time=time(0,0), end_time=time(12,0))[0]
-                on_task = Task.objects.get_or_create(intensity=2, context="Available to work", timeblock=block, schedule=self, start_date=task.start_date)
+                on_task = Task.objects.get_or_create(work_key=self.work_key, context="Available to work", timeblock=block, schedule=self, start_date=task.start_date)
                 new_task_list.append(on_task)
     def generate_tasks_from_calls(self, call_list: List[str], start=None):
         """If start_date is not given auto-fill the start of the month"""
@@ -68,13 +82,12 @@ class Schedule(models.Model):
 
 class Shift(models.Model):
     """Preset of TimeBlocks, takes a start_date and fills in the times from it (creating scheudleblocks)"""
-    schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE)
-    call = models.SlugField("Call String", max_length=7, unique=True, primary_key=True)
+    schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE, related_name="shifts")
+    call = models.CharField(max_length=63, unique=True)
+    work_key = models.ForeignKey(WorkKey, on_delete=models.CASCADE, related_name="+")
     context = models.CharField(max_length=255, default="", blank=True)
-    intensity = models.PositiveIntegerField(default=2, choices=WORK_KEYS)
-    color = ColorField()
 
-    linked = models.ForeignKey("shift", null=True, blank=True, unique=False, related_name="+", on_delete=models.SET_NULL)
+    linked = models.ForeignKey("shift", verbose_name="linked_after", null=True, blank=True, unique=False, related_name="+", on_delete=models.SET_NULL)
     
     def create_tasks(self, set_date: Union[date, datetime]):
         if isinstance(set_date, datetime):
@@ -84,7 +97,7 @@ class Shift(models.Model):
         days = 1
         for block in self.blocks.all():
             start_date, end_date = block.get_datetimes(set_date)
-            task, created = Task.objects.get_or_create(preset=self,timeblock=block,schedule=self.schedule,start_date=start_date,)
+            task, created = Task.objects.get_or_create(preset=self, work_key=self.work_key, timeblock=block,schedule=self.schedule,start_date=start_date,)
             created_tasks.append(task)
             days += block.days
         if self.linked and self.linked != self:
@@ -104,33 +117,19 @@ class Shift(models.Model):
         self.validate_linked()
         return super().clean()
 
-    def save(self, *args, **kwargs):
-        call = self.call
-        try:
-            self.refresh_from_db(fields=['call'])
-        except: pass
-        old_call = self.call
-        if call != old_call:
-            copy = deepcopy(self)
-            copy.call = call
-            copy.pk = call
-            super(Shift, copy).save(*args, **kwargs)
-            self.blocks.update(preset=copy)
-        super().save(*args, **kwargs)
-
     def __str__(self) -> str:
-        return f"{self.call} - {self.schedule.__str__()} ({self.get_intensity_display()})"
+        return f"{self.call} - {self.schedule.__str__()} ({self.work_key.name}^{self.work_key.level})"
 
 class TimeBlock(models.Model):
     """Allows for naive time objects stetching across days"""
-    schedule = models.ForeignKey(Shift, related_name='blocks', null=True, blank=True, unique=False, on_delete=models.SET_NULL)
+    Shift = models.ForeignKey(Shift, related_name='blocks', null=True, blank=True, unique=False, on_delete=models.SET_NULL)
     days = models.SmallIntegerField("Stetched Days", default=0, help_text="(autofills 1 if start > end)")
     start_time = models.TimeField(auto_now=False, auto_now_add=False)
     end_time = models.TimeField(auto_now=False, auto_now_add=False)
     order = models.PositiveSmallIntegerField(default=0) #if multiple time blocks on a Shift, choose which one
 
     def fix_days(self):
-        if (self.days == 0 and self.start_time < self.end_time):
+        if (self.days == 0 and self.start_time > self.end_time):
             self.days = 1
 
     def clean(self) -> None:
@@ -180,8 +179,8 @@ class Task(models.Model):
     week_number = models.CharField(max_length=2, blank=True) #defines whether mon, tues, weds, thurs, fri, sat, sun
     start_date = models.DateField(auto_now=False, auto_now_add=False)
     context = models.CharField(max_length=255, default="", blank=True)
-    intensity = models.SmallIntegerField(default=2, choices=WORK_KEYS)
-    color = ColorField()
+    work_key = models.ForeignKey(WorkKey, on_delete=models.CASCADE)
+    color = models.CharField(max_length=7, default="#FFFFFF", blank=True)
 
     @property
     def end_date(self):
@@ -197,6 +196,10 @@ class Task(models.Model):
     def end_datetime(self):
         return self.get_datetimes()[1]
 
+    def get_color(self):
+        if self.color:
+            return self.color
+        else: return self.work_key.color
 
     def get_times(self):
         return self.times
@@ -204,7 +207,7 @@ class Task(models.Model):
         return f"{self.schedule} ({self.start_date})"
     def save(self, *args, **kwargs):
         if self.preset != None:
-            self.intensity = self.preset.intensity
+            self.work_key = self.preset.work_key
         if self.week_number == "" or self.week_number == None:
             self.week_number = self.start_date.isocalendar()[1]
         super().save(*args, **kwargs)

@@ -8,7 +8,7 @@ from django.db.models import QuerySet
 # Create your views here.
 from datetime import date, timedelta, datetime
 from .models import Task, Shift, TimeBlock, Schedule
-from .forms import ShiftForm
+from .forms import AddShiftForm
 
 from plotly.offline import plot
 import plotly.express as px
@@ -24,22 +24,25 @@ def refresh_tasks_view(request:HttpRequest, call):
         _date = data.get('date')
         print("_date")
         
-def bulk_schedule(request, pk):
+def bulk_schedule(request, pk=None):
     if request.method == "POST":
         data = request.POST.copy()
         call_strs: str = data.get("calls",None)
         start_day = data.get("day", None)
         calls = call_strs.split(",")
         try:
-            schedule = Schedule.objects.get(owner=request.user)
+            if pk:
+                schedule = Schedule.objects.get(pk=pk)
+            else:
+                schedule = Schedule.objects.get(owner=request.user)
         except:
-            return render(request, "bulk_form.html", {"message":"You do not have a schedule associated with your account"})
+            return render(request, "bulk_form.html", {"message":"No schedule found."})
         schedule.generate_tasks_from_calls(calls, start=start_day)
     return render(request,"bulk_form.html")
 
 def schedule_form(request):
     """View for scheduling new tasks"""
-    shiftform = ShiftForm(request.POST)
+    shiftform = AddShiftForm(request.POST)
 def index(request):
     """View for displaying all schedules"""
     context = {}

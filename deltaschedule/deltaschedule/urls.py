@@ -24,5 +24,6 @@ from schedule.views import index, bulk_schedule
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', index, name="index"),
-    path('bulk_form', bulk_schedule, name="bulk_form")
-] + static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
+    path('bulk_form/', bulk_schedule, name="bulk_form"),
+    path('bulk_form/<pk>/', bulk_schedule, name="bulk_form"),
+] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

@@ -50,7 +50,7 @@
 
     .chart-wrapper .chart-values li {
     flex: 1;
-    min-width: 80px;
+    min-width: 120px;
     text-align: center;
     }
 
@@ -138,7 +138,7 @@
 </ul>
 <ul class="chart-bars">
     {% for task in  tasks %}
-    <li data-duration="{{task.start_datetime|date:'j:G'}}-{{task.end_datetime|date:'j:G'}}" data-color="#b03532">Task: {{task.context}}<span class="pop">Starts 5:7, ends 7:36</span></li>
+    <li data-duration="{{task.start_datetime|date:'j:G'}}-{{task.end_datetime|date:'j:G'}}" data-color="{{task.work_key.color}}">Task: {{task.context}}<span class="pop">{{task.start_datetime|date:'G:i'}} - {{task.end_datetime|date:'G:i'}}</span></li>
     {% endfor %}
 </ul>
 {% endfor %}
